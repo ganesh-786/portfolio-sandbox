@@ -1,0 +1,83 @@
+name: Perf A/B (sandbox only)
+
+# Rehearsal helper. Builds the baseline and the Next 16 candidate side by side, each under its own
+# base path, and publishes both in one Pages artifact so they can be timed on the real GitHub CDN.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  build:
+    name: Build both versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read # to check out the code
+    steps:
+      - name: Checkout the baseline
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: rehearsal/s6-base
+          path: a
+          persist-credentials: false
+
+      - name: Checkout the Next 16 candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: rehearsal/s6-next16
+          path: b
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build both under their own path
+        run: |
+          set -e
+          for v in a b; do
+            (
+              cd "$v"
+              npm ci --ignore-scripts --no-audit --no-fund
+              sed -i "s#output: 'export',#output: 'export', basePath: '/portfolio-sandbox/$v',#" next.config.ts
+              grep -n "basePath" next.config.ts
+              npm run build
+            )
+          done
+          mkdir site
+          cp -r a/out site/a
+          cp -r b/out site/b
+          ls site/a | head -5
+          ls site/b | head -5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: './site'
+
+  deploy:
+    name: Publish to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: build
+    permissions:
+      pages: write # to publish the artifact to GitHub Pages
+      id-token: write # to prove to GitHub Pages that this workflow is the one publishing
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
