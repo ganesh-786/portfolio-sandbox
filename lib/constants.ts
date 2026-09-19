@@ -518,3 +518,5 @@ export const CONTACT_DATA = {
 export const FOOTER_DATA = {
   text: `© ${new Date().getFullYear()} Ganesh Chaudhary`,
 };
+
+export const rehearsalTypeError: number = "this is not a number"
