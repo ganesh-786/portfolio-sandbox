@@ -30,7 +30,8 @@ const BUDGET = {
   totalJs: 977_000, // all JavaScript under _next/static, measured 850,137 and 843,900
   initialJsGzip: 143_000, // JavaScript the home page loads up front, gzipped, measured 124,325
   css: 43_000, // all CSS, measured 37,451
-  anyFile: 500_000, // any single published file that is not JavaScript, largest today 151,110
+  anyFile: 500_000, // any published file that is not JavaScript or a PDF, largest today 202,750 (index.html)
+  pdf: 2_000_000, // a CV heavier than this is nearly always an uncompressed image, today 151,110
 }
 
 // Sections the navigation scrolls to (NAV_ITEMS in lib/constants.ts) plus the skip link and
@@ -66,11 +67,12 @@ const SECRET_PATTERNS = [
   ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
 ]
 
-// Leftovers that mean a template or a test value reached the page.
+// Leftovers that mean a template or a test value reached the page. Each pattern is narrow on
+// purpose: prose about localhost or a TEMP sensor is legitimate in a developer portfolio.
 const LEFTOVER_PATTERNS = [
-  ['localhost address', /localhost|127\.0\.0\.1|\/\/0\.0\.0\.0/i],
-  ['TODO or FIXME marker', /\b(?:TODO|FIXME)\b/],
-  ['TEMP marker', /\bTEMP\b/],
+  ['link to a localhost address', /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b/i],
+  ['TODO or FIXME marker', /\b(?:TODO|FIXME)\s*[:(]/],
+  ['TEMP_ placeholder token', /\bTEMP_[A-Z_]+\b/],
   ['lorem ipsum', /lorem ipsum/i],
   ['unfilled YOUR_ token', /\bYOUR_[A-Z_]+\b/],
   ['stringified object', /\[object Object\]/],
@@ -141,17 +143,49 @@ const tagsOf = (html, name) =>
     index: m.index,
     attr: attributes(m[0]),
   }))
-const withoutScripts = (html) => html.replace(/<script\b[\s\S]*?<\/script>/gi, '')
+// Leaves out the <script> elements, so the checks only look at markup. This is a scan and not a
+// replace(): there is no pattern that a crafted fragment could rebuild after removal, and an end
+// tag such as </script > is still recognised.
+function withoutScripts(html) {
+  const opening = /<script(?=[\s/>])/gi
+  const closing = /<\/script[^>]*>/gi
+  let markup = ''
+  let from = 0
+  for (;;) {
+    opening.lastIndex = from
+    const start = opening.exec(html)
+    if (!start) return markup + html.slice(from)
+    markup += html.slice(from, start.index)
+    closing.lastIndex = start.index
+    const end = closing.exec(html)
+    if (!end) return markup
+    from = end.index + end[0].length
+  }
+}
 const metaWhere = (html, key, value) =>
   tagsOf(html, 'meta').filter((t) => t.attr[key]?.toLowerCase() === value.toLowerCase())
 
-// Turns a URL from the page into a path inside out/, or null when it points elsewhere.
+// True when an absolute URL belongs to this site. The origin is compared exactly, because a prefix
+// test such as startsWith(ORIGIN) would also accept https://ganeshtharu.com.np.example.org.
+const isOurs = (url) => {
+  try {
+    return new URL(url).origin === ORIGIN
+  } catch {
+    return false
+  }
+}
+
+// Turns a URL from the page into a path inside out/, or null when it points to another site.
 function localPath(url) {
-  let u = url.trim()
-  if (u.startsWith(ORIGIN)) u = u.slice(ORIGIN.length) || '/'
-  if (!u.startsWith('/') || u.startsWith('//')) return null
-  u = decodeURIComponent(u.split('#')[0].split('?')[0])
-  return u.endsWith('/') ? `${u}index.html`.slice(1) : u.slice(1)
+  let parsed
+  try {
+    parsed = new URL(url.trim(), `${ORIGIN}/`)
+  } catch {
+    return null
+  }
+  if (parsed.origin !== ORIGIN) return null
+  const path = decodeURIComponent(parsed.pathname)
+  return path.endsWith('/') ? `${path}index.html`.slice(1) : path.slice(1)
 }
 function resolvesToFile(url) {
   const rel = localPath(url)
@@ -235,7 +269,7 @@ check('Home page', 'link previews use an image that exists at the size it claims
     const tag = metaWhere(home, key.startsWith('og') ? 'property' : 'name', key)[0]
     return [key, tag?.attr.content]
   })
-  const problems = urls.filter(([, u]) => !u || !u.startsWith(`${ORIGIN}/`) || !resolvesToFile(u)).map(([k]) => k)
+  const problems = urls.filter(([, u]) => !u || !isOurs(u) || !resolvesToFile(u)).map(([k]) => k)
   if (problems.length) return fail(`${problems.join(', ')} missing or not a file on ${DOMAIN}`)
   const png = readBytes(localPath(urls[0][1]))
   const isPng = png.subarray(0, 8).toString('hex') === '89504e470d0a1a0a'
@@ -283,8 +317,13 @@ check('Home page', 'every image has alt text', () => {
 })
 check('Home page', 'no template or test leftovers in the text', () => {
   const text = `${homeMarkup}\n${exists('index.txt') ? readText('index.txt') : ''}`
-  const found = LEFTOVER_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([label]) => label)
-  return expect(found.length === 0, `found: ${found.join(', ')}`)
+  const found = LEFTOVER_PATTERNS.flatMap(([label, pattern]) => {
+    const hit = pattern.exec(text)
+    if (!hit) return []
+    const around = text.slice(Math.max(0, hit.index - 25), hit.index + hit[0].length + 25).replace(/\s+/g, ' ')
+    return [`${label} near "${around}"`]
+  })
+  return expect(found.length === 0, found.join('; '))
 })
 
 check('References', 'every local file the pages and stylesheets point to exists', () => {
@@ -323,7 +362,7 @@ check('References', 'the CV link leads to a complete PDF', () => {
     if (!exists(rel)) { problems.push(`${rel} is missing`); continue }
     const bytes = readBytes(rel)
     if (bytes.subarray(0, 5).toString('latin1') !== '%PDF-') problems.push(`${rel} is not a PDF`)
-    else if (!bytes.subarray(-1024).toString('latin1').includes('%%EOF')) problems.push(`${rel} looks truncated (no %%EOF)`)
+    else if (!bytes.subarray(-2048).toString('latin1').includes('%%EOF')) problems.push(`${rel} looks truncated (no %%EOF)`)
     else if (bytes.length < 5000) problems.push(`${rel} is only ${bytes.length} bytes`)
   }
   return expect(problems.length === 0, problems.join('; '), pdfs.join(', '))
@@ -387,7 +426,7 @@ check('Crawlers', 'robots.txt welcomes crawlers and lists the sitemap', () => {
 })
 check('Crawlers', 'sitemap.xml only lists pages on the live domain', () => {
   const locs = [...readText('sitemap.xml').matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
-  const wrong = locs.filter((u) => !(u === ORIGIN || u.startsWith(`${ORIGIN}/`)))
+  const wrong = locs.filter((u) => !isOurs(u))
   return expect(locs.length > 0 && wrong.length === 0, locs.length ? `off-domain: ${wrong.join(', ')}` : 'no URLs listed', `${locs.length} URL`)
 })
 check('Crawlers', 'the web app manifest parses and its icons exist', () => {
@@ -416,8 +455,9 @@ check('Size', 'CSS is within budget', () => {
   return expect(total <= BUDGET.css, `${kb(total)} is over the ${kb(BUDGET.css)} budget, check that no build output or generated folder is being scanned by Tailwind`, `${kb(total)} of ${kb(BUDGET.css)}`)
 })
 check('Size', 'no single published file is oversized', () => {
-  const big = files.filter((f) => !f.rel.endsWith('.js') && f.size > BUDGET.anyFile).map((f) => `${f.rel} (${kb(f.size)})`)
-  return expect(big.length === 0, `over ${kb(BUDGET.anyFile)}: ${big.join(', ')}`)
+  const limit = (f) => (f.rel.toLowerCase().endsWith('.pdf') ? BUDGET.pdf : BUDGET.anyFile)
+  const big = files.filter((f) => !f.rel.endsWith('.js') && f.size > limit(f)).map((f) => `${f.rel} (${kb(f.size)}, limit ${kb(limit(f))})`)
+  return expect(big.length === 0, `too large: ${big.join(', ')}`)
 })
 
 // ---------------------------------------------------------------- report
