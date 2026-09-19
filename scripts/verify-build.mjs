@@ -24,6 +24,9 @@ const DOMAIN = 'ganeshtharu.com.np'
 // The only third-party hosts the Content-Security-Policy may name.
 const ALLOWED_CSP_HOSTS = ['https://api.web3forms.com']
 
+// Where the contact form posts. The page bundle has to contain exactly this address.
+const FORM_ENDPOINT = 'https://api.web3forms.com/submit'
+
 // About 15 percent above the build measured on 2026-09-19, in bytes. Total JavaScript was
 // measured on two machines, a Windows laptop and the CI runner (Linux, Node 22).
 const BUDGET = {
@@ -175,6 +178,15 @@ const isOurs = (url) => {
   }
 }
 
+// The host of a URL given as text, or an empty string when it is not a URL.
+const hostOf = (value) => {
+  try {
+    return new URL(String(value)).hostname
+  } catch {
+    return ''
+  }
+}
+
 // Turns a URL from the page into a path inside out/, or null when it points to another site.
 function localPath(url) {
   let parsed
@@ -282,7 +294,7 @@ check('Home page', 'structured data (JSON-LD) is valid and describes the person'
   if (!block) return fail('no JSON-LD block found')
   const data = JSON.parse(block[1])
   const problems = []
-  if (!String(data['@context']).includes('schema.org')) problems.push('@context')
+  if (hostOf(data['@context']) !== 'schema.org') problems.push('@context')
   if (data['@type'] !== 'Person') problems.push('@type is not Person')
   if (!data.name) problems.push('name')
   if (data.url?.replace(/\/$/, '') !== ORIGIN) problems.push('url')
@@ -372,7 +384,8 @@ check('Contact form', 'the form endpoint and access key are in the page bundle',
   const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
   const wired = files.some((f) => f.rel.endsWith('.js') && f.rel.startsWith('_next/static/') && (() => {
     const text = readFileSync(f.full, 'utf8')
-    return text.includes('https://api.web3forms.com/submit') && uuid.test(text)
+    const urls = text.match(/https:\/\/[^\s"'`\\)]+/g) ?? []
+    return urls.some((u) => u === FORM_ENDPOINT) && uuid.test(text)
   })())
   return expect(wired, 'no script contains both the Web3Forms endpoint and an access key, so the site would fall back to no form')
 })
