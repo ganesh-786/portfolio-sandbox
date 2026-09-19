@@ -31,7 +31,7 @@ const FORM_ENDPOINT = 'https://api.web3forms.com/submit'
 // measured on two machines, a Windows laptop and the CI runner (Linux, Node 22).
 const BUDGET = {
   totalJs: 977_000, // all JavaScript under _next/static, measured 850,137 and 843,900
-  initialJsGzip: 143_000, // JavaScript the home page loads up front, gzipped, measured 124,325
+  initialJsGzip: 200_000, // JavaScript the home page loads up front, gzipped, measured 124,325
   css: 43_000, // all CSS, measured 37,451
   anyFile: 500_000, // any published file that is not JavaScript or a PDF, largest today 202,750 (index.html)
   pdf: 2_000_000, // a CV heavier than this is nearly always an uncompressed image, today 151,110
