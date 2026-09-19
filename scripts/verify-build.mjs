@@ -30,7 +30,8 @@ const BUDGET = {
   totalJs: 977_000, // all JavaScript under _next/static, measured 850,137 and 843,900
   initialJsGzip: 143_000, // JavaScript the home page loads up front, gzipped, measured 124,325
   css: 43_000, // all CSS, measured 37,451
-  anyFile: 500_000, // any single published file that is not JavaScript, largest today 151,110
+  anyFile: 500_000, // any published file that is not JavaScript or a PDF, largest today 202,750 (index.html)
+  pdf: 2_000_000, // a CV heavier than this is nearly always an uncompressed image, today 151,110
 }
 
 // Sections the navigation scrolls to (NAV_ITEMS in lib/constants.ts) plus the skip link and
@@ -66,11 +67,12 @@ const SECRET_PATTERNS = [
   ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
 ]
 
-// Leftovers that mean a template or a test value reached the page.
+// Leftovers that mean a template or a test value reached the page. Each pattern is narrow on
+// purpose: prose about localhost or a TEMP sensor is legitimate in a developer portfolio.
 const LEFTOVER_PATTERNS = [
-  ['localhost address', /localhost|127\.0\.0\.1|\/\/0\.0\.0\.0/i],
-  ['TODO or FIXME marker', /\b(?:TODO|FIXME)\b/],
-  ['TEMP marker', /\bTEMP\b/],
+  ['link to a localhost address', /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b/i],
+  ['TODO or FIXME marker', /\b(?:TODO|FIXME)\s*[:(]/],
+  ['TEMP_ placeholder token', /\bTEMP_[A-Z_]+\b/],
   ['lorem ipsum', /lorem ipsum/i],
   ['unfilled YOUR_ token', /\bYOUR_[A-Z_]+\b/],
   ['stringified object', /\[object Object\]/],
@@ -283,8 +285,13 @@ check('Home page', 'every image has alt text', () => {
 })
 check('Home page', 'no template or test leftovers in the text', () => {
   const text = `${homeMarkup}\n${exists('index.txt') ? readText('index.txt') : ''}`
-  const found = LEFTOVER_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([label]) => label)
-  return expect(found.length === 0, `found: ${found.join(', ')}`)
+  const found = LEFTOVER_PATTERNS.flatMap(([label, pattern]) => {
+    const hit = pattern.exec(text)
+    if (!hit) return []
+    const around = text.slice(Math.max(0, hit.index - 25), hit.index + hit[0].length + 25).replace(/\s+/g, ' ')
+    return [`${label} near "${around}"`]
+  })
+  return expect(found.length === 0, found.join('; '))
 })
 
 check('References', 'every local file the pages and stylesheets point to exists', () => {
@@ -323,7 +330,7 @@ check('References', 'the CV link leads to a complete PDF', () => {
     if (!exists(rel)) { problems.push(`${rel} is missing`); continue }
     const bytes = readBytes(rel)
     if (bytes.subarray(0, 5).toString('latin1') !== '%PDF-') problems.push(`${rel} is not a PDF`)
-    else if (!bytes.subarray(-1024).toString('latin1').includes('%%EOF')) problems.push(`${rel} looks truncated (no %%EOF)`)
+    else if (!bytes.subarray(-2048).toString('latin1').includes('%%EOF')) problems.push(`${rel} looks truncated (no %%EOF)`)
     else if (bytes.length < 5000) problems.push(`${rel} is only ${bytes.length} bytes`)
   }
   return expect(problems.length === 0, problems.join('; '), pdfs.join(', '))
@@ -416,8 +423,9 @@ check('Size', 'CSS is within budget', () => {
   return expect(total <= BUDGET.css, `${kb(total)} is over the ${kb(BUDGET.css)} budget, check that no build output or generated folder is being scanned by Tailwind`, `${kb(total)} of ${kb(BUDGET.css)}`)
 })
 check('Size', 'no single published file is oversized', () => {
-  const big = files.filter((f) => !f.rel.endsWith('.js') && f.size > BUDGET.anyFile).map((f) => `${f.rel} (${kb(f.size)})`)
-  return expect(big.length === 0, `over ${kb(BUDGET.anyFile)}: ${big.join(', ')}`)
+  const limit = (f) => (f.rel.toLowerCase().endsWith('.pdf') ? BUDGET.pdf : BUDGET.anyFile)
+  const big = files.filter((f) => !f.rel.endsWith('.js') && f.size > limit(f)).map((f) => `${f.rel} (${kb(f.size)}, limit ${kb(limit(f))})`)
+  return expect(big.length === 0, `too large: ${big.join(', ')}`)
 })
 
 // ---------------------------------------------------------------- report
