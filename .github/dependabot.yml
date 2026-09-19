@@ -6,8 +6,11 @@
 #
 # Every pull request opened here has to pass the same checks as any other change, and nothing is
 # merged automatically. Routine updates are grouped, so a normal week is one pull request per
-# ecosystem. A new major version of the framework or its toolchain is a project of its own, not a
-# routine bump, so those are ignored on purpose. Remove an entry when that project is picked up.
+# ecosystem.
+#
+# Major versions are ignored on purpose. They are breaking by definition, and every open pull
+# request counts against the limit, so a few unmerged majors would silence the routine weekly one.
+# A major upgrade is planned and tested as a change of its own.
 version: 2
 
 updates:
@@ -32,24 +35,7 @@ updates:
           - minor
           - patch
     ignore:
-      - dependency-name: next
-        update-types: ['version-update:semver-major']
-      - dependency-name: react
-        update-types: ['version-update:semver-major']
-      - dependency-name: react-dom
-        update-types: ['version-update:semver-major']
-      - dependency-name: tailwindcss
-        update-types: ['version-update:semver-major']
-      - dependency-name: '@tailwindcss/postcss'
-        update-types: ['version-update:semver-major']
-      - dependency-name: typescript
-        update-types: ['version-update:semver-major']
-      # These follow the React and Node versions above, they do not move on their own.
-      - dependency-name: '@types/react'
-        update-types: ['version-update:semver-major']
-      - dependency-name: '@types/react-dom'
-        update-types: ['version-update:semver-major']
-      - dependency-name: '@types/node'
+      - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
@@ -70,8 +56,6 @@ updates:
       actions:
         patterns:
           - '*'
-    # The deploy workflow's actions have to move together, and are upgraded by hand and tested first.
-    # Once that is done this entry can be removed so major versions are proposed too.
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
