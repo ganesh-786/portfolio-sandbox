@@ -24,9 +24,10 @@ const DOMAIN = 'ganeshtharu.com.np'
 // The only third-party hosts the Content-Security-Policy may name.
 const ALLOWED_CSP_HOSTS = ['https://api.web3forms.com']
 
-// About 15 percent above the build measured on 2026-09-19, in bytes.
+// About 15 percent above the build measured on 2026-09-19, in bytes. Total JavaScript was
+// measured on two machines, a Windows laptop and the CI runner (Linux, Node 22).
 const BUDGET = {
-  totalJs: 977_000, // all JavaScript under _next/static, measured 850,137
+  totalJs: 977_000, // all JavaScript under _next/static, measured 850,137 and 843,900
   initialJsGzip: 143_000, // JavaScript the home page loads up front, gzipped, measured 124,325
   css: 43_000, // all CSS, measured 37,451
   anyFile: 500_000, // any single published file that is not JavaScript, largest today 151,110
@@ -104,7 +105,10 @@ function check(group, name, test) {
 
 const abs = (rel) => join(outDir, rel)
 const exists = (rel) => existsSync(abs(rel))
-const readBytes = (rel) => readFileSync(abs(rel))
+const readBytes = (rel) => {
+  if (!exists(rel)) throw new Error(`${rel} is missing`)
+  return readFileSync(abs(rel))
+}
 const readText = (rel) => readBytes(rel).toString('utf8').replace(/\r\n/g, '\n')
 const kb = (bytes) => `${(bytes / 1000).toFixed(1)} kB`
 
