@@ -492,7 +492,7 @@ export const CONTACT_DATA = {
   email: "ganesh98245.np@gmail.com",
   // Web3Forms access key (safe to expose by design). While empty, the section
   // falls back to the direct email button.
-  formAccessKey: "",
+  formAccessKey: "00000000-0000-4000-8000-000000000000",
   formSubject: "New message from ganeshtharu.com.np",
   socials: [
     {
