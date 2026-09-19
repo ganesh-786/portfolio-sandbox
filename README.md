@@ -1,3 +1,5 @@
+> **Temporary sandbox.** A rehearsal copy used to test workflow changes. Not the live site. See SANDBOX.md.
+
 # Ganesh Chaudhary — Full Stack Developer Portfolio
 
 A personal portfolio built with Next.js and exported as a fully static site. It shows
