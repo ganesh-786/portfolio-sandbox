@@ -1,0 +1,10 @@
+name: Unpinned test
+on:
+  push:
+    branches: ['rehearsal/unpinned-test']
+permissions: {}
+jobs:
+  t:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
