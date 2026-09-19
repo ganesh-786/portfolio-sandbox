@@ -93,3 +93,5 @@ comes from `public/CNAME`. Every change reaches `main` through a pull request.
 ---
 
 MIT License
+
+Protection rehearsal C.
